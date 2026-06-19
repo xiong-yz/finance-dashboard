@@ -407,7 +407,7 @@ function renderLoanTable(rows) {
   </tr>`).join('');
 }
 
-const PASSWORD_HASH = '8be29a6679220fd77632e4a00446bd4e342dc7131f566a167b8d550ad75dd88b';
+const PASSWORD_HASH = '4f85fa5b2e2dc89685fa50e10edaf3d0d578ea98e316cbf9b73364c5472c85b9';
 
 async function hashPassword(pw) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
