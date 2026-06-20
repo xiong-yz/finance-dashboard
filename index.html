@@ -300,6 +300,8 @@ function renderSpendTrend(txns) {
     const ym = (r['來源帳單'] || '').substring(0, 7);
     const amt = r['金額'] || 0;
     if (!ym || amt >= 0) return;
+    const cat = r['分類'] || '';
+    if (cat === '轉帳') return;  // 排除轉帳
     byMonth[ym] = (byMonth[ym] || 0) + Math.abs(amt);
   });
   const months = Object.keys(byMonth).sort();
@@ -338,6 +340,7 @@ function renderCatChart(txns, month) {
     const amt = r['金額'] || 0;
     if (amt >= 0) return;
     const cat = r['分類'] || '其他';
+    if (cat === '轉帳') return;  // 排除轉帳
     byCat[cat] = (byCat[cat] || 0) + Math.abs(amt);
   });
 
