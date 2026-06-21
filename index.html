@@ -74,7 +74,36 @@
   .month-selector label { font-size: 13px; color: #666; }
 
   .no-data { text-align: center; padding: 40px; color: #bbb; font-size: 13px; }
-</style>
+
+
+  /* 交易明細表格 */
+  .tx-filter-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .tx-filter-row select { padding: 6px 10px; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 13px; background: #fff; cursor: pointer; }
+  .tx-filter-row input { padding: 6px 10px; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 13px; width: 160px; outline: none; }
+  .tx-filter-row input:focus { border-color: #888; }
+  tr.clickable:hover { background: #f9f9f7; cursor: pointer; }
+  .cat-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; background: #f0f0f0; color: #555; }
+  .tx-pagination { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-top: 1px solid #f0f0f0; font-size: 12px; color: #888; }
+  .tx-pagination button { padding: 4px 12px; border: 1px solid #e0e0e0; border-radius: 5px; background: #fff; font-size: 12px; cursor: pointer; }
+  .tx-pagination button:disabled { opacity: 0.4; cursor: default; }
+
+  /* 編輯視窗 */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #fff; border-radius: 14px; padding: 24px; width: 360px; max-width: 90vw; box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
+  .modal h3 { font-size: 15px; font-weight: 500; margin-bottom: 18px; }
+  .modal-field { margin-bottom: 14px; }
+  .modal-field label { display: block; font-size: 12px; color: #888; margin-bottom: 5px; }
+  .modal-field input, .modal-field select { width: 100%; padding: 8px 10px; border: 1px solid #e0e0e0; border-radius: 7px; font-size: 14px; outline: none; }
+  .modal-field input:focus, .modal-field select:focus { border-color: #888; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 20px; }
+  .modal-actions button { flex: 1; padding: 9px; border-radius: 7px; font-size: 14px; cursor: pointer; border: none; }
+  .btn-cancel { background: #f5f5f0; color: #555; }
+  .btn-save { background: #1a1a1a; color: #fff; }
+  .btn-save:disabled { opacity: 0.5; cursor: default; }
+  .modal-msg { font-size: 12px; margin-top: 10px; text-align: center; }
+  .modal-msg.success { color: #1d9e75; }
+  .modal-msg.error { color: #d85a30; }</style>
 </head>
 <body>
 
@@ -137,9 +166,66 @@
     </div>
   </div>
 
-  <div class="section-title">投資明細</div>
+  <div class="section-title">交易明細</div>
   <div class="table-card">
-    <h3>投資庫存快照</h3>
+    <h3 style="display:flex;align-items:center;justify-content:space-between">
+      <span>信用卡交易明細</span>
+      <span id="txCount" style="font-size:12px;color:#aaa;font-weight:400"></span>
+    </h3>
+    <div style="padding:12px 20px 0">
+      <div class="tx-filter-row">
+        <select id="txMonthSelect"></select>
+        <select id="txCatSelect"><option value="">全部分類</option></select>
+        <input id="txSearch" placeholder="搜尋摘要..." />
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr>
+          <th>日期</th><th>銀行</th><th>摘要</th>
+          <th class="text-right">金額</th><th>分類</th>
+        </tr></thead>
+        <tbody id="txBody"></tbody>
+      </table>
+    </div>
+    <div class="tx-pagination">
+      <button id="txPrev" onclick="txChangePage(-1)">← 上一頁</button>
+      <span id="txPageInfo"></span>
+      <button id="txNext" onclick="txChangePage(1)">下一頁 →</button>
+    </div>
+  </div>
+
+  <!-- 編輯視窗 -->
+  <div class="modal-overlay" id="editModal">
+    <div class="modal">
+      <h3>✏️ 編輯交易</h3>
+      <div class="modal-field">
+        <label>摘要</label>
+        <input type="text" id="editDesc" />
+      </div>
+      <div class="modal-field">
+        <label>金額</label>
+        <input type="number" id="editAmt" step="0.01" />
+      </div>
+      <div class="modal-field">
+        <label>分類</label>
+        <select id="editCat">
+          <option>餐飲</option><option>交通</option><option>購物</option>
+          <option>娛樂(含旅遊/旅行社/航空/訂房)</option><option>日用品</option>
+          <option>醫療保健</option><option>訂閱服務</option><option>繳費類</option>
+          <option>轉帳</option><option>其他</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeModal()">取消</button>
+        <button class="btn-save" id="btnSave" onclick="saveEdit()">儲存</button>
+      </div>
+      <div class="modal-msg" id="modalMsg"></div>
+    </div>
+  </div>
+  <div class="section-title">投資明細</div>
+  <!-- <div class="table-card">
+    <h3>投資庫存快照</h3> -->
     <div style="overflow-x:auto">
       <table id="investTable">
         <thead><tr><th>標的</th><th>類型</th><th class="text-right">現值 (TWD)</th><th class="text-right">損益</th><th class="text-right">報酬率</th></tr></thead>
@@ -162,6 +248,127 @@
 </div>
 
 <script>
+
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwkX-OQWFpAf2FX7Sqyegnu3NIwfXdZL92bIiwIIXsBu6QPDZBsm6R7SKDtVIcIUKU/exec';
+
+let allTxns = [];
+let filteredTxns = [];
+let txPage = 0;
+const TX_PAGE_SIZE = 30;
+let editingRowIndex = null;
+
+function renderTxTable(txns) {
+  allTxns = txns;
+  const months = [...new Set(txns.map(r => (r['來源帳單'] || '').substring(0,7)).filter(Boolean))].sort().reverse();
+  const mSel = document.getElementById('txMonthSelect');
+  mSel.innerHTML = '<option value="">全部月份</option>' + months.map(m => `<option value="${m}">${m}</option>`).join('');
+  const cats = [...new Set(txns.map(r => r['分類']).filter(Boolean))].sort();
+  const cSel = document.getElementById('txCatSelect');
+  cSel.innerHTML = '<option value="">全部分類</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+  mSel.addEventListener('change', applyTxFilter);
+  cSel.addEventListener('change', applyTxFilter);
+  document.getElementById('txSearch').addEventListener('input', applyTxFilter);
+  applyTxFilter();
+}
+
+function applyTxFilter() {
+  const month = document.getElementById('txMonthSelect').value;
+  const cat = document.getElementById('txCatSelect').value;
+  const search = document.getElementById('txSearch').value.toLowerCase();
+  filteredTxns = allTxns.filter(r => {
+    const ym = (r['來源帳單'] || '').substring(0,7);
+    if (month && ym !== month) return false;
+    if (cat && r['分類'] !== cat) return false;
+    if (search && !(r['摘要'] || '').toLowerCase().includes(search)) return false;
+    return true;
+  });
+  txPage = 0;
+  renderTxPage();
+}
+
+function renderTxPage() {
+  const start = txPage * TX_PAGE_SIZE;
+  const end = start + TX_PAGE_SIZE;
+  const page = filteredTxns.slice(start, end);
+  const total = filteredTxns.length;
+  document.getElementById('txCount').textContent = `共 ${total} 筆`;
+  document.getElementById('txPageInfo').textContent = total > 0 ? `第 ${start+1}-${Math.min(end,total)} 筆` : '無資料';
+  document.getElementById('txPrev').disabled = txPage === 0;
+  document.getElementById('txNext').disabled = end >= total;
+  document.getElementById('txBody').innerHTML = page.map(r => {
+    const rowIndex = allTxns.indexOf(r) + 2;
+    const amt = r['金額'] || 0;
+    const cat = r['分類'] || '';
+    const descEsc = (r['摘要']||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const catEsc = cat.replace(/'/g,"\\'");
+    return `<tr class="clickable" onclick="openEdit(${rowIndex}, '${descEsc}', ${amt}, '${catEsc}')">
+      <td>${r['日期'] || '-'}</td>
+      <td>${r['銀行'] || '-'}</td>
+      <td>${r['摘要'] || '-'}</td>
+      <td class="text-right ${amt < 0 ? 'negative' : 'positive'}">${fmt(amt)}</td>
+      <td><span class="cat-badge">${cat || '未分類'}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function txChangePage(dir) {
+  txPage += dir;
+  renderTxPage();
+}
+
+function openEdit(rowIndex, desc, amt, cat) {
+  editingRowIndex = rowIndex;
+  document.getElementById('editDesc').value = desc;
+  document.getElementById('editAmt').value = amt;
+  document.getElementById('editCat').value = cat || '其他';
+  document.getElementById('modalMsg').textContent = '';
+  document.getElementById('modalMsg').className = 'modal-msg';
+  document.getElementById('btnSave').disabled = false;
+  document.getElementById('editModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('editModal').classList.remove('open');
+  editingRowIndex = null;
+}
+
+async function saveEdit() {
+  const desc = document.getElementById('editDesc').value;
+  const amt = parseFloat(document.getElementById('editAmt').value);
+  const cat = document.getElementById('editCat').value;
+  const btn = document.getElementById('btnSave');
+  const msg = document.getElementById('modalMsg');
+  btn.disabled = true;
+  msg.textContent = '儲存中...';
+  msg.className = 'modal-msg';
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'updateTransaction', rowIndex: editingRowIndex, 摘要: desc, 金額: amt, 分類: cat })
+    });
+    const data = await res.json();
+    if (data.success) {
+      msg.textContent = '✓ 儲存成功';
+      msg.className = 'modal-msg success';
+      const r = allTxns[editingRowIndex - 2];
+      if (r) { r['摘要'] = desc; r['金額'] = amt; r['分類'] = cat; }
+      renderTxPage();
+      setTimeout(closeModal, 800);
+    } else {
+      throw new Error(data.error || '儲存失敗');
+    }
+  } catch(e) {
+    msg.textContent = '❌ ' + e.message;
+    msg.className = 'modal-msg error';
+    btn.disabled = false;
+  }
+}
+
+window.addEventListener('click', function(e) {
+  const modal = document.getElementById('editModal');
+  if (modal && e.target === modal) closeModal();
+});
+
 const SHEET_ID = '1-_xWxMsiCgpeNe_82anV4GFgW8SHt--Rwljeu7N5nfk';
 const BASE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=`;
 
