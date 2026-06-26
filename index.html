@@ -212,8 +212,8 @@
         <select id="editCat">
           <option>餐飲</option><option>交通</option><option>購物</option>
           <option>娛樂</option><option>日用品</option>
-          <option>醫療保健</option><option>訂閱服務</option><option>繳費類</option>
-          <option>轉帳(加值)</option><option>保險</option><option>其他</option>
+          <option>醫療保健</option><option>訂閱服務</option><option>繳費</option>
+          <option>轉帳</option><option>保險</option><option>其他</option>
         </select>
       </div>
       <div class="modal-actions">
@@ -408,25 +408,43 @@ let catChartInst = null;
 
 async function init() {
   try {
+    // ✅ 加入「投資即時」分頁，讀取失敗不影響其他資料
     const [overview, txns, invest, loans] = await Promise.all([
       fetchSheet('月度總覽'),
       fetchSheet('信用卡交易明細'),
       fetchSheet('投資庫存快照'),
       fetchSheet('貸款快照'),
+      fetchSheet('投資即時').catch(() => []),
     ]);
 
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('mainContent').style.display = 'block';
+    // 建立即時現值 map：{ '2412 中華電': { value, updatedAt } }
+    const livePriceMap = {};
+    let liveUpdatedAt = '';
+    livePricesRaw.forEach(r => {
+      const name = r['投資標的'];
+      const val = r['現值'];
+      const updated = r['更新時間'];
+      if (name && val != null && val !== '') {
+        livePriceMap[name] = { value: Number(val), updatedAt: updated || '' };
+        if (!liveUpdatedAt && updated) liveUpdatedAt = updated;
+      }
+    });
 
     const latest = overview[overview.length - 1] || {};
     document.getElementById('lastUpdated').textContent = `最後更新：${latest['年月'] || '-'}`;
 
-    renderMetrics(latest);
+    // 計算即時投資總現值（有即時資料就用，否則 fallback 到月度總覽）
+    const liveInvestTotal = Object.values(livePriceMap).reduce((s, v) => s + v.value, 0);
+    const investTotal = liveInvestTotal > 0 ? liveInvestTotal : (latest['投資現值總額'] || 0);
+
+    renderMetrics(latest, investTotal, liveUpdatedAt);
     renderAssetChart(overview);
     renderSpendTrend(txns);
     renderMonthFilter(txns);
     renderTxTable(txns);
-    renderInvestTable(invest);
+    renderInvestTable(invest, livePriceMap, liveUpdatedAt);
     renderLoanTable(loans);
 
   } catch(e) {
@@ -436,17 +454,19 @@ async function init() {
   }
 }
 
-function renderMetrics(d) {
-  const net = d['淨資產'] || 0;
+// ✅ 加入 investTotal 和 liveUpdatedAt 參數
+function renderMetrics(d, investTotal, liveUpdatedAt) {
+  const net = (d['存款總額(TWD)'] || 0) + investTotal - (d['信用卡應繳總額'] || 0) - (d['貸款餘額總額'] || 0);
   const dep = d['存款總額(TWD)'] || 0;
-  const inv = d['投資現值總額'] || 0;
   const cc  = d['信用卡應繳總額'] || 0;
   const loan= d['貸款餘額總額'] || 0;
+
+  const investSub = liveUpdatedAt ? `更新 ${liveUpdatedAt}` : 'TWD';
 
   const items = [
     { label: '淨資產', value: fmt(net), cls: net >= 0 ? 'positive' : 'negative', sub: d['年月'] },
     { label: '存款', value: fmt(dep), cls: 'neutral', sub: 'TWD' },
-    { label: '投資現值', value: fmt(inv), cls: 'positive', sub: 'TWD' },
+    { label: '投資現值', value: fmt(investTotal), cls: 'positive', sub: investSub },
     { label: '信用卡應繳', value: fmt(cc), cls: cc > 0 ? 'negative' : 'neutral', sub: '待繳' },
     { label: '貸款餘額', value: fmt(loan), cls: 'negative', sub: '剩餘' },
   ];
@@ -574,8 +594,8 @@ function renderCatChart(txns, month) {
     }
   });
 }
-
-function renderInvestTable(rows) {
+// ✅ 改用即時現值，fallback 到帳單現值
+function renderInvestTable(rows, livePriceMap = {}, liveUpdatedAt = '') {
   const latest = {};
   rows.forEach(r => {
     const key = r['個股投資標的'] || r['投資類型'] || '-';
@@ -583,20 +603,53 @@ function renderInvestTable(rows) {
     if (!latest[key] || ym > latest[key]['年月']) latest[key] = r;
   });
 
-  const body = document.getElementById('investBody');
-  const items = Object.values(latest).sort((a, b) => (b['投資現值'] || 0) - (a['投資現值'] || 0));
-  if (!items.length) { body.innerHTML = '<tr><td colspan="5" class="no-data">尚無資料</td></tr>'; return; }
+  // 顯示更新時間
+  if (liveUpdatedAt) {
+    document.getElementById('investUpdated').textContent = `股價更新：${liveUpdatedAt}`;
+  }
 
+  const body = document.getElementById('investBody');
+  const items = Object.values(latest).sort((a, b) => {
+    const aKey = a['個股投資標的'] || '-';
+    const bKey = b['個股投資標的'] || '-';
+    const aVal = livePriceMap[aKey]?.value ?? a['投資現值'] ?? 0;
+    const bVal = livePriceMap[bKey]?.value ?? b['投資現值'] ?? 0;
+    return bVal - aVal;
+  });
+
+  if (!items.length) {
+    body.innerHTML = '<tr><td colspan="5" class="no-data">尚無資料</td></tr>';
+    return;
+  }
   body.innerHTML = items.map(r => {
-    const pnl = r['損益_含息'] || r['損益_不含息'] || 0;
-    const rate = r['報酬率_含息'] || r['報酬率_不含息'] || 0;
-    const typeColor = r['投資類型'] === '台股' ? 'badge-green' : r['投資類型'] === '美股' ? 'badge-blue' : 'badge-amber';
+    const key = r['個股投資標的'] || '-';
+    const liveData = livePriceMap[key];
+    const isLive = !!liveData;
+
+    // 現值：即時 > 帳單
+    const currentVal = isLive ? liveData.value : (r['投資現值'] || 0);
+
+    // 損益：有即時現值就用現值-成本重算，否則用帳單損益
+    const cost = r['總投資成本'] || 0;
+    let pnl, rate;
+    if (isLive && cost > 0) {
+      pnl = currentVal - cost;
+      rate = pnl / cost;
+    } else {
+      pnl = r['損益_含息'] ?? r['損益_不含息'] ?? 0;
+      rate = parseFloat(r['報酬率_含息'] ?? r['報酬率_不含息'] ?? '0') / 100;
+    }
+
+    const typeColor = r['投資類型'] === '台股' ? 'badge-green'
+                    : r['投資類型'] === '美股' ? 'badge-blue'
+                    : 'badge-amber';
+
     return `<tr>
-      <td>${r['個股投資標的'] || '-'}</td>
+      <td>${key}${isLive ? '<span class="badge badge-live">即時</span>' : ''}</td>
       <td><span class="badge ${typeColor}">${r['投資類型'] || '-'}</span></td>
-      <td class="text-right">${fmt(r['投資現值'])}</td>
+      <td class="text-right">${fmt(currentVal)}</td>
       <td class="text-right ${pnl >= 0 ? 'positive' : 'negative'}">${fmtSign(pnl)}</td>
-      <td class="text-right ${rate >= 0 ? 'positive' : 'negative'}">${rate != null ? (rate * 100).toFixed(1) + '%' : '-'}</td>
+      <td class="text-right ${rate >= 0 ? 'positive' : 'negative'}">${isNaN(rate) ? '-' : (rate * 100).toFixed(1) + '%'}</td>
     </tr>`;
   }).join('');
 }
