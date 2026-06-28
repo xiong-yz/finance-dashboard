@@ -223,6 +223,7 @@
       <div class="modal-msg" id="modalMsg"></div>
     </div>
   </div>
+
   <div class="section-title">投資明細</div>
   <div class="table-card">
     <h3>投資庫存快照</h3>
@@ -406,8 +407,8 @@ function fmtSign(n) {
   return (n >= 0 ? '+' : '-') + s;
 }
 
-async function fetchSheet(name) {
-  const url = BASE + encodeURIComponent(name);
+async function fetchSheet(name, hasHeader=true) {
+  const url = BASE + encodeURIComponent(name) + (hasHeader ? '&headers=1' : '');
   const res = await fetch(url);
   const text = await res.text();
   const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/);
@@ -417,7 +418,7 @@ async function fetchSheet(name) {
   if (!json.table || !json.table.cols) return [];
   const cols = json.table.cols.map(c => c.label);
   const rows = (json.table.rows || []).map(r =>
-    Object.fromEntries(cols.map((c, i) => [c, r.c[i]?.v ?? null]))
+    Object.fromEntries(cols.map((c, i) => [c, r.c?.[i]?.v ?? null]))
   );
   return rows;
 }
@@ -427,7 +428,7 @@ let catChartInst = null;
 async function init() {
   try {
     // ✅ 加入「投資即時」分頁，讀取失敗不影響其他資料
-    const [overview, txns, invest, loans] = await Promise.all([
+    const [overview, txns, invest, loans, livePricesRaw] = await Promise.all([
       fetchSheet('月度總覽'),
       fetchSheet('信用卡交易明細'),
       fetchSheet('投資庫存快照'),
@@ -437,7 +438,7 @@ async function init() {
 
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('mainContent').style.display = 'block';
-    
+
     // 建立即時現值 map：{ '2412 中華電': { value, updatedAt } }
     const livePriceMap = {};
     let liveUpdatedAt = '';
