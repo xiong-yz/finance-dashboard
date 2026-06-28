@@ -226,9 +226,18 @@
   <div class="section-title">投資明細</div>
   <div class="table-card">
     <h3>投資庫存快照</h3>
+    <h3 style="display:flex;align-items:center;justify-content:space-between">
+      <span>投資庫存</span>
+      <span id="investUpdated" style="font-size:11px;color:#aaa;font-weight:400"></span>
+    </h3>
     <div style="overflow-x:auto">
       <table id="investTable">
-        <thead><tr><th>標的</th><th>類型</th><th class="text-right">現值 (TWD)</th><th class="text-right">損益</th><th class="text-right">報酬率</th></tr></thead>
+        <thead><tr>
+          <th>標的</th><th>類型</th>
+          <th class="text-right">現值 (TWD)</th>
+          <th class="text-right">損益</th>
+          <th class="text-right">報酬率</th>
+        </tr></thead>
         <tbody id="investBody"></tbody>
       </table>
     </div>
@@ -239,7 +248,12 @@
     <h3>貸款快照</h3>
     <div style="overflow-x:auto">
       <table id="loanTable">
-        <thead><tr><th>銀行</th><th>類型</th><th class="text-right">現貸餘額</th><th class="text-right">本月還款</th><th class="text-right">利率</th></tr></thead>
+         <thead><tr>
+          <th>銀行</th><th>類型</th>
+          <th class="text-right">現貸餘額</th>
+          <th class="text-right">本月還款</th>
+          <th class="text-right">利率</th>
+        </tr></thead>
         <tbody id="loanBody"></tbody>
       </table>
     </div>
@@ -396,7 +410,11 @@ async function fetchSheet(name) {
   const url = BASE + encodeURIComponent(name);
   const res = await fetch(url);
   const text = await res.text();
-  const json = JSON.parse(text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/)[1]);
+  const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/);
+  if (!match) throw new Error(`fetchSheet(${name}): 無法解析回應`);
+  let json;
+  try { json = JSON.parse(match[1]); } catch(e) { return []; }
+  if (!json.table || !json.table.cols) return [];
   const cols = json.table.cols.map(c => c.label);
   const rows = (json.table.rows || []).map(r =>
     Object.fromEntries(cols.map((c, i) => [c, r.c[i]?.v ?? null]))
@@ -419,6 +437,7 @@ async function init() {
 
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('mainContent').style.display = 'block';
+    
     // 建立即時現值 map：{ '2412 中華電': { value, updatedAt } }
     const livePriceMap = {};
     let liveUpdatedAt = '';
